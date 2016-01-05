@@ -36,11 +36,21 @@ void queue_add(Queue *queue, void *data) {
     /* In the critical section, the queue is in a slightly inconsistent state
        where the length might differ*/
     t_assert(queue);
-    Queue_node *node = TUT_MALLOCZ(Queue_node);
+
+    pthread_mutex_lock(&queue -> write_lock);
+    Queue_node *read;
+    __atomic_load(&queue -> read, &read, __ATOMIC_SEQ_CST);
+    Queue_node *node;
+    if (queue -> all == read) {
+        node = TUT_MALLOCZ(Queue_node);
+    } else {
+        /* We should never get a nullpointer before reaching read */
+        node = queue -> all;
+        queue -> all = node -> next;
+    }
     node -> data = data;
     node -> next = NULL;
 
-    pthread_mutex_lock(&queue -> write_lock);
     queue -> last = node;
     __atomic_store(&queue -> last -> next, &node, __ATOMIC_SEQ_CST);
     __atomic_add_fetch(&queue -> length, 1, __ATOMIC_SEQ_CST);
